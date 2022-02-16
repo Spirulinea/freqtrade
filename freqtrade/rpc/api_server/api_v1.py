@@ -14,12 +14,12 @@ from freqtrade.rpc import RPC
 from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, BlacklistPayload,
                                                   BlacklistResponse, Count, Daily,
                                                   DeleteLockRequest, DeleteTrade, ForceBuyPayload,
-                                                  ForceBuyResponse, ForceSellPayload, Locks, Logs,
-                                                  OpenTradeSchema, PairHistory, PerformanceEntry,
-                                                  Ping, PlotConfig, Profit, ResultMsg, ShowConfig,
-                                                  Stats, StatusMsg, StrategyListResponse,
-                                                  StrategyResponse, SysInfo, Version,
-                                                  WhitelistResponse)
+                                                  ForceBuyResponse, ForceSellPayload, Health, Locks,
+                                                  Logs, OpenTradeSchema, PairHistory,
+                                                  PerformanceEntry, Ping, PlotConfig, Profit,
+                                                  ResultMsg, ShowConfig, Stats, StatusMsg,
+                                                  StrategyListResponse, StrategyResponse, SysInfo,
+                                                  Version, WhitelistResponse)
 from freqtrade.rpc.api_server.deps import get_config, get_exchange, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
 
@@ -136,8 +136,9 @@ def show_config(rpc: Optional[RPC] = Depends(get_rpc_optional), config=Depends(g
 def forcebuy(payload: ForceBuyPayload, rpc: RPC = Depends(get_rpc)):
     ordertype = payload.ordertype.value if payload.ordertype else None
     stake_amount = payload.stakeamount if payload.stakeamount else None
+    entry_tag = payload.entry_tag if payload.entry_tag else None
 
-    trade = rpc._rpc_forcebuy(payload.pair, payload.price, ordertype, stake_amount)
+    trade = rpc._rpc_forcebuy(payload.pair, payload.price, ordertype, stake_amount, entry_tag)
 
     if trade:
         return ForceBuyResponse.parse_obj(trade.to_json())
@@ -214,7 +215,8 @@ def reload_config(rpc: RPC = Depends(get_rpc)):
 
 
 @router.get('/pair_candles', response_model=PairHistory, tags=['candle data'])
-def pair_candles(pair: str, timeframe: str, limit: Optional[int], rpc: RPC = Depends(get_rpc)):
+def pair_candles(
+        pair: str, timeframe: str, limit: Optional[int] = None, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_analysed_dataframe(pair, timeframe, limit)
 
 
@@ -290,3 +292,8 @@ def list_available_pairs(timeframe: Optional[str] = None, stake_currency: Option
 @router.get('/sysinfo', response_model=SysInfo, tags=['info'])
 def sysinfo():
     return RPC._rpc_sysinfo()
+
+
+@router.get('/health', response_model=Health, tags=['info'])
+def health(rpc: RPC = Depends(get_rpc)):
+    return rpc._health()
