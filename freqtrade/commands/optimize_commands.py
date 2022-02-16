@@ -43,14 +43,20 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     """
     # Import here to avoid loading backtesting module when it's not used
     from freqtrade.optimize.backtesting import Backtesting
+    from freqtrade.optimize.backtesting_parallel import BacktestingParallel
 
     # Initialize configuration
     config = setup_optimize_configuration(args, RunMode.BACKTEST)
 
     logger.info('Starting freqtrade in Backtesting mode')
 
+    print(args)
     # Initialize backtesting object
-    backtesting = Backtesting(config)
+    if args['parallel']:
+        backtesting = BacktestingParallel(config)
+    else:
+        backtesting = Backtesting(config)
+    #
     backtesting.start()
 
 

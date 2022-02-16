@@ -2,6 +2,7 @@ import logging
 import operator
 from datetime import datetime, timezone
 from pathlib import Path
+from joblib import dump, load
 from typing import Dict, List, Optional, Tuple
 
 import arrow
@@ -64,7 +65,7 @@ def load_data(datadir: Path,
               startup_candles: int = 0,
               fail_without_data: bool = False,
               data_format: str = 'json',
-              ) -> Dict[str, DataFrame]:
+              cache_file: Path = None) -> Dict[str, DataFrame]:
     """
     Load ohlcv history data for a list of pairs.
 
@@ -76,23 +77,34 @@ def load_data(datadir: Path,
     :param startup_candles: Additional candles to load at the start of the period
     :param fail_without_data: Raise OperationalException if no data is found.
     :param data_format: Data format which should be used. Defaults to json
+    :param cache_file:
     :return: dict(<pair>:<Dataframe>)
     """
     result: Dict[str, DataFrame] = {}
     if startup_candles > 0 and timerange:
         logger.info(f'Using indicator startup period: {startup_candles} ...')
 
-    data_handler = get_datahandler(datadir, data_format)
+    if cache_file and Path(cache_file).is_file():
+        with cache_file.open('rb') as f:
+            result = load(f)
 
-    for pair in pairs:
-        hist = load_pair_history(pair=pair, timeframe=timeframe,
-                                 datadir=datadir, timerange=timerange,
-                                 fill_up_missing=fill_up_missing,
-                                 startup_candles=startup_candles,
-                                 data_handler=data_handler
-                                 )
-        if not hist.empty:
-            result[pair] = hist
+        logger.info("Data loaded from cache.")
+    else:
+        data_handler = get_datahandler(datadir, data_format)
+
+        for pair in pairs:
+            hist = load_pair_history(pair=pair, timeframe=timeframe,
+                                     datadir=datadir, timerange=timerange,
+                                     fill_up_missing=fill_up_missing,
+                                     drop_incomplete=False,
+                                     startup_candles=startup_candles,
+                                     data_handler=data_handler
+                                     )
+            if not hist.empty:
+                result[pair] = hist
+
+        if cache_file:
+            dump(result, cache_file)
 
     if fail_without_data and not result:
         raise OperationalException("No data found. Terminating.")

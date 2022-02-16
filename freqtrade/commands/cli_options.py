@@ -244,6 +244,12 @@ AVAILABLE_CLI_OPTIONS = {
         nargs='+',
         default='default',
     ),
+    "parallel": Arg(
+        '--parallel',
+        help='Backtest pairs in parallel.',
+        action='store_true',
+        default=False,
+    ),
     "print_all": Arg(
         '--print-all',
         help='Print all results, not only the best ones.',
