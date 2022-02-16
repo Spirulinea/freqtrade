@@ -22,6 +22,7 @@ from pandas import DataFrame
 from freqtrade.constants import (DEFAULT_AMOUNT_RESERVE_PERCENT, NON_OPEN_EXCHANGE_STATES,
                                  ListPairsWithTimeframes)
 from freqtrade.data.converter import ohlcv_to_dataframe, trades_dict_to_list
+from freqtrade.enums import RunMode
 from freqtrade.exceptions import (DDosProtection, ExchangeError, InsufficientFundsError,
                                   InvalidOrderException, OperationalException, PricingError,
                                   RetryableOrderError, TemporaryError)
@@ -85,10 +86,14 @@ class Exchange:
         self._api: ccxt.Exchange = None
         self._api_async: ccxt_async.Exchange = None
         self._markets: Dict = {}
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-
+        self.loop = None
         self._config.update(config)
+
+        runmode = self._config.get('runmode')
+        # Leave the loop to None to avoid pickle error with joblib
+        if runmode and runmode != RunMode.BACKTEST:
+            self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
         # Holds last candle refreshed time of each pair
         self._pairs_last_refresh_time: Dict[Tuple[str, str], int] = {}
@@ -175,7 +180,7 @@ class Exchange:
     def close(self):
         logger.debug("Exchange object destroyed, closing async loop")
         if (self._api_async and inspect.iscoroutinefunction(self._api_async.close)
-                and self._api_async.session):
+                and self._api_async.session and self.loop):
             logger.info("Closing async ccxt session.")
             self.loop.run_until_complete(self._api_async.close())
 
@@ -331,7 +336,7 @@ class Exchange:
 
     def _load_async_markets(self, reload: bool = False) -> None:
         try:
-            if self._api_async:
+            if self._api_async and self.loop:
                 self.loop.run_until_complete(
                     self._api_async.load_markets(reload=reload))
 

@@ -34,6 +34,7 @@ from freqtrade.strategy.interface import IStrategy, SellCheckTuple
 from freqtrade.strategy.strategy_wrapper import strategy_safe_wrapper
 from freqtrade.wallets import Wallets
 
+from joblib import Parallel, delayed
 
 logger = logging.getLogger(__name__)
 
@@ -696,6 +697,11 @@ class Backtesting:
             'final_balance': self.wallets.get_total(self.strategy.config['stake_currency']),
         }
 
+    @delayed
+    def advise_indicators_delayed(self, pair_data: DataFrame, pair: str) -> (str, DataFrame):
+        logger.info(f'advise_indicators_delayed pair={pair}')
+        return pair, self.strategy.advise_indicators(pair_data.copy(), {'pair': pair})
+
     def backtest_one_strategy(self, strat: IStrategy, data: Dict[str, DataFrame],
                               timerange: TimeRange):
         self.progress.init_step(BacktestState.ANALYZE, 0)
@@ -716,7 +722,16 @@ class Backtesting:
             max_open_trades = 0
 
         # need to reprocess data every time to populate signals
-        preprocessed = self.strategy.advise_all_indicators(data)
+        # preprocessed = self.strategy.advise_all_indicators(data)
+        with Parallel(n_jobs=-1) as parallel:
+            res = parallel(
+                self.advise_indicators_delayed(pair_data, pair) for pair, pair_data in data.items()
+            )
+        preprocessed: Dict[str, DataFrame] = {}
+
+        for pair, data in res:
+            preprocessed[pair] = data
+
 
         # Trim startup period from analyzed dataframe
         preprocessed_tmp = trim_dataframes(preprocessed, timerange, self.required_startup)
